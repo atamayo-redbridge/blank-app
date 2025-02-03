@@ -24,7 +24,7 @@ def extract_text_from_pdf(pdf_file):
         images = convert_from_path(pdf_file)
         text = ""
         for img in images:
-            text += pytesseract.image_to_string(img, config="--psm 6") + "\n\n"  # Optimized OCR
+            text += pytesseract.image_to_string(img, config="--psm 6 --oem 3") + "\n\n"  # Optimized OCR
     return text.strip()
 
 # Function to extract structured tables
@@ -47,8 +47,11 @@ def extract_tables_from_pdf(pdf_file):
                     df.columns = df.iloc[0]  # Set first row as header
                     df = df[1:].reset_index(drop=True)
 
-                    # Clean multi-line cells
-                    df = df.applymap(lambda x: " ".join(x.split()) if isinstance(x, str) else x)
+                    # Merge multi-line cells
+                    df = df.applymap(lambda x: " ".join(str(x).split()) if isinstance(x, str) else x)
+                    
+                    # Fill missing column names for merged headers
+                    df.columns = [f"Column_{i}" if str(col) == "nan" else col for i, col in enumerate(df.columns)]
                     
                     tables.append(df)
     return tables
