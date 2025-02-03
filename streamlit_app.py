@@ -8,29 +8,28 @@ from io import BytesIO
 from PIL import Image
 import numpy as np
 
-# Function to extract text from PDF (OCR if needed)
+# Function to extract text from PDF (with OCR fallback)
 def extract_text_from_pdf(pdf_file):
-    """Extracts text from a PDF while handling both text-based and scanned documents."""
+    """Extracts text while detecting scanned pages & applying OCR when needed."""
     text = ""
 
-    # Try to extract text using PyMuPDF
+    # Try extracting text normally (PyMuPDF)
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     for page in doc:
         text += page.get_text("text") + "\n\n"
 
-    # If no text is found, assume it's a scanned document and use OCR
+    # If no text is found, assume it's scanned and apply OCR
     if not text.strip():
         pdf_file.seek(0)  # Reset file pointer
         images = convert_from_path(pdf_file)
         text = ""
         for img in images:
-            text += pytesseract.image_to_string(img) + "\n\n"  # OCR extraction
-
+            text += pytesseract.image_to_string(img, config="--psm 6") + "\n\n"  # Optimized OCR
     return text.strip()
 
-# Function to extract tables from PDF with better handling
+# Function to extract structured tables
 def extract_tables_from_pdf(pdf_file):
-    """Extracts structured tables from PDF while handling multi-line cells."""
+    """Extracts tables from PDF with complex table handling (merged cells, nested rows)."""
     tables = []
     pdf_file.seek(0)  # Reset file pointer for pdfplumber
     with pdfplumber.open(pdf_file) as pdf:
@@ -38,18 +37,23 @@ def extract_tables_from_pdf(pdf_file):
             extracted_tables = page.extract_tables()
             for table in extracted_tables:
                 df = pd.DataFrame(table)
-                df = df.dropna(how="all")  # Remove empty rows
-                df = df.dropna(axis=1, how="all")  # Remove empty columns
-                
-                # Ensure valid DataFrame (avoid malformed data)
+
+                # Remove empty rows/columns
+                df = df.dropna(how="all")
+                df = df.dropna(axis=1, how="all")
+
+                # Handle merged header cells
                 if not df.empty and df.shape[1] > 1:
                     df.columns = df.iloc[0]  # Set first row as header
-                    df = df[1:].reset_index(drop=True)  # Drop header row
-                    df = df.applymap(lambda x: " ".join(x.split()) if isinstance(x, str) else x)  # Clean multi-line cells
+                    df = df[1:].reset_index(drop=True)
+
+                    # Clean multi-line cells
+                    df = df.applymap(lambda x: " ".join(x.split()) if isinstance(x, str) else x)
+                    
                     tables.append(df)
     return tables
 
-# Function to save extracted text and tables to an Excel file
+# Function to save extracted text and tables to Excel
 def save_to_excel(text_data, tables_data):
     """Saves extracted content to an Excel file."""
     output = BytesIO()
@@ -65,7 +69,7 @@ def save_to_excel(text_data, tables_data):
     return output
 
 # ------------------ Streamlit UI ------------------
-st.set_page_config(page_title="📄 PDF to Excel Converter with OCR", layout="wide")
+st.set_page_config(page_title="📄 Advanced PDF to Excel Converter", layout="wide")
 
 st.title("📄 PDF to Excel Converter with OCR & Advanced Table Handling")
 st.write("Upload a **PDF file**, preview structured text and tables, and download as **Excel**.")
