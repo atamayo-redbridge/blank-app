@@ -4,7 +4,7 @@ import pdfplumber
 import fitz  # PyMuPDF
 from io import BytesIO
 
-# Function to extract text using PyMuPDF (fitz) for better recognition
+# Function to extract structured text from PDF using PyMuPDF (fitz)
 def extract_text_with_layout(pdf_file):
     """Extracts text from a PDF while preserving layout using PyMuPDF."""
     text = ""
@@ -13,20 +13,25 @@ def extract_text_with_layout(pdf_file):
         text += page.get_text("text") + "\n\n"
     return text
 
-# Function to extract tables from PDF with improved accuracy
+# Function to extract tables from PDF with better error handling
 def extract_tables_from_pdf(pdf_file):
-    """Extract tables with structure maintained."""
+    """Extracts tables from a PDF while ensuring valid DataFrame structure."""
     tables = []
     pdf_file.seek(0)  # Reset file pointer for pdfplumber
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
             extracted_tables = page.extract_tables()
             for table in extracted_tables:
+                # Convert table to DataFrame and clean it
                 df = pd.DataFrame(table)
                 df = df.dropna(how="all")  # Remove empty rows
-                df.columns = df.iloc[0]  # Set first row as header
-                df = df[1:].reset_index(drop=True)  # Drop header row
-                tables.append(df)
+                df = df.dropna(axis=1, how="all")  # Remove empty columns
+                
+                # Ensure valid DataFrame (avoid lists of None)
+                if not df.empty and df.shape[1] > 1:
+                    df.columns = df.iloc[0]  # Set first row as header
+                    df = df[1:].reset_index(drop=True)  # Drop header row
+                    tables.append(df)
     return tables
 
 # Function to save extracted text and tables to an Excel file
@@ -67,8 +72,11 @@ if uploaded_file:
         st.subheader("📊 Extracted Tables Preview")
         if extracted_tables:
             for i, table in enumerate(extracted_tables):
-                st.write(f"Table {i+1}")
-                st.dataframe(table)
+                try:
+                    st.write(f"Table {i+1}")
+                    st.dataframe(table)  # Display table safely
+                except ValueError:
+                    st.warning(f"⚠️ Could not display Table {i+1}. Invalid format.")
         else:
             st.write("No tables detected.")
 
