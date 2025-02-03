@@ -4,3 +4,4 @@ pdfplumber
 python-docx
 openpyxl
 pymupdf
+io
