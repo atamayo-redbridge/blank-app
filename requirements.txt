@@ -1,7 +1,4 @@
 streamlit
 pandas
 pdfplumber
-python-docx
 openpyxl
-pymupdf
-io
