@@ -4,17 +4,20 @@ import pdfplumber
 import fitz  # PyMuPDF
 from io import BytesIO
 
-# Function to extract text using PyMuPDF for better recognition
+# Function to extract text using PyMuPDF (fitz) for better recognition
 def extract_text_with_layout(pdf_file):
+    """Extracts text from a PDF while preserving layout using PyMuPDF."""
     text = ""
-    doc = fitz.open(streamlit_file=pdf_file)
+    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")  # Correctly read Streamlit uploaded file
     for page in doc:
-        text += page.get_text("text") + "\n\n"  # 'text' mode maintains structure
+        text += page.get_text("text") + "\n\n"
     return text
 
 # Function to extract tables from PDF with improved accuracy
 def extract_tables_from_pdf(pdf_file):
+    """Extract tables with structure maintained."""
     tables = []
+    pdf_file.seek(0)  # Reset file pointer for pdfplumber
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
             extracted_tables = page.extract_tables()
@@ -28,13 +31,12 @@ def extract_tables_from_pdf(pdf_file):
 
 # Function to save extracted text and tables to an Excel file
 def save_to_excel(text_data, tables_data):
+    """Saves extracted content to an Excel file."""
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Save extracted text
         text_df = pd.DataFrame({"Extracted Text": text_data.split("\n")})
         text_df.to_excel(writer, sheet_name="Extracted Text", index=False)
 
-        # Save extracted tables
         if tables_data:
             for i, table in enumerate(tables_data):
                 table.to_excel(writer, sheet_name=f"Table_{i+1}", index=False)
