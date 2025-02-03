@@ -2,35 +2,50 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import fitz  # PyMuPDF
+import pytesseract
+from pdf2image import convert_from_path
 from io import BytesIO
+from PIL import Image
+import numpy as np
 
-# Function to extract structured text from PDF using PyMuPDF (fitz)
-def extract_text_with_layout(pdf_file):
-    """Extracts text from a PDF while preserving layout using PyMuPDF."""
+# Function to extract text from PDF (OCR if needed)
+def extract_text_from_pdf(pdf_file):
+    """Extracts text from a PDF while handling both text-based and scanned documents."""
     text = ""
-    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")  # Correctly read Streamlit uploaded file
+
+    # Try to extract text using PyMuPDF
+    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
     for page in doc:
         text += page.get_text("text") + "\n\n"
-    return text
 
-# Function to extract tables from PDF with better error handling
+    # If no text is found, assume it's a scanned document and use OCR
+    if not text.strip():
+        pdf_file.seek(0)  # Reset file pointer
+        images = convert_from_path(pdf_file)
+        text = ""
+        for img in images:
+            text += pytesseract.image_to_string(img) + "\n\n"  # OCR extraction
+
+    return text.strip()
+
+# Function to extract tables from PDF with better handling
 def extract_tables_from_pdf(pdf_file):
-    """Extracts tables from a PDF while ensuring valid DataFrame structure."""
+    """Extracts structured tables from PDF while handling multi-line cells."""
     tables = []
     pdf_file.seek(0)  # Reset file pointer for pdfplumber
     with pdfplumber.open(pdf_file) as pdf:
         for page in pdf.pages:
             extracted_tables = page.extract_tables()
             for table in extracted_tables:
-                # Convert table to DataFrame and clean it
                 df = pd.DataFrame(table)
                 df = df.dropna(how="all")  # Remove empty rows
                 df = df.dropna(axis=1, how="all")  # Remove empty columns
                 
-                # Ensure valid DataFrame (avoid lists of None)
+                # Ensure valid DataFrame (avoid malformed data)
                 if not df.empty and df.shape[1] > 1:
                     df.columns = df.iloc[0]  # Set first row as header
                     df = df[1:].reset_index(drop=True)  # Drop header row
+                    df = df.applymap(lambda x: " ".join(x.split()) if isinstance(x, str) else x)  # Clean multi-line cells
                     tables.append(df)
     return tables
 
@@ -50,15 +65,15 @@ def save_to_excel(text_data, tables_data):
     return output
 
 # ------------------ Streamlit UI ------------------
-st.set_page_config(page_title="📄 Advanced PDF to Excel Converter", layout="wide")
+st.set_page_config(page_title="📄 PDF to Excel Converter with OCR", layout="wide")
 
-st.title("📄 PDF to Excel Converter with Enhanced Text & Table Extraction")
+st.title("📄 PDF to Excel Converter with OCR & Advanced Table Handling")
 st.write("Upload a **PDF file**, preview structured text and tables, and download as **Excel**.")
 
 uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
 
 if uploaded_file:
-    extracted_text = extract_text_with_layout(uploaded_file)
+    extracted_text = extract_text_from_pdf(uploaded_file)
     extracted_tables = extract_tables_from_pdf(uploaded_file)
 
     # Create a two-column layout for better preview
